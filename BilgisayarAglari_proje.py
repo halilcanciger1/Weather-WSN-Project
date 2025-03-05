@@ -26,7 +26,7 @@ class HavaDurumuArayuz:
     def __init__(self, root):
         self.root = root
         self.root.title("İstanbul Hava Durumu Takip Sistemi")
-        self.root.geometry("600x800")
+        self.root.geometry("800x1000")  # Pencere boyutunu artır
         
         # API anahtarı
         self.api_key = "1d3ba4e02dda8d44b246972c395518f4"
@@ -68,21 +68,33 @@ class HavaDurumuArayuz:
         self.ilce_combo.pack(pady=5)
         self.ilce_combo.set(list(self.sensor_noktalari.keys())[0])
         
+        # Buton frame'i
+        self.button_frame = ttk.Frame(self.main_frame)
+        self.button_frame.pack(pady=10)
+        
         # Hava durumu güncelleme butonu
         self.guncelle_btn = ttk.Button(
-            self.main_frame,
+            self.button_frame,
             text="Hava Durumunu Güncelle",
             command=self.hava_durumu_guncelle
         )
-        self.guncelle_btn.pack(pady=20)
+        self.guncelle_btn.pack(side="left", padx=5)
 
         # Harita gösterme butonu
         self.harita_btn = ttk.Button(
-            self.main_frame,
+            self.button_frame,
             text="Haritayı Göster",
             command=self.harita_goster
         )
-        self.harita_btn.pack(pady=10)
+        self.harita_btn.pack(side="left", padx=5)
+        
+        # Bulanık mantık detayları butonu
+        self.bulanik_btn = ttk.Button(
+            self.button_frame,
+            text="Bulanık Mantık Detayları",
+            command=self.bulanik_mantik_detaylari_goster
+        )
+        self.bulanik_btn.pack(side="left", padx=5)
         
         # Hava durumu bilgi alanı
         self.bilgi_frame = ttk.LabelFrame(self.main_frame, text="Ortalama Hava Durumu Bilgileri")
@@ -117,11 +129,24 @@ class HavaDurumuArayuz:
         self.koordinator_label.pack(pady=5)
         
         # Enerji tüketimi göstergesi
-        self.enerji_frame = ttk.LabelFrame(self.main_frame, text="Enerji Tüketim Tahmini")
+        self.enerji_frame = ttk.LabelFrame(self.main_frame, text="Bulanık Mantık Enerji Analizi")
         self.enerji_frame.pack(pady=10, fill="x")
         
         self.enerji_tuketim_label = ttk.Label(self.enerji_frame, text="Tahmini Enerji Tüketimi: ")
         self.enerji_tuketim_label.pack(pady=5)
+        
+        # Bulanık mantık üyelik dereceleri
+        self.uyelik_frame = ttk.LabelFrame(self.enerji_frame, text="Üyelik Dereceleri")
+        self.uyelik_frame.pack(pady=5, fill="x")
+        
+        self.sicaklik_uyelik_label = ttk.Label(self.uyelik_frame, text="Sıcaklık Üyelik: ")
+        self.sicaklik_uyelik_label.pack(pady=2)
+        
+        self.nem_uyelik_label = ttk.Label(self.uyelik_frame, text="Nem Üyelik: ")
+        self.nem_uyelik_label.pack(pady=2)
+        
+        self.ruzgar_uyelik_label = ttk.Label(self.uyelik_frame, text="Rüzgar Üyelik: ")
+        self.ruzgar_uyelik_label.pack(pady=2)
     
     def harita_olustur(self):
         """Kadıköy'ün haritasını ve sensör noktalarını oluşturur"""
@@ -190,6 +215,11 @@ class HavaDurumuArayuz:
             ort_basinc = toplam_basinc / sensor_sayisi
             ort_ruzgar = toplam_ruzgar / sensor_sayisi
             
+            # Son değerleri sakla
+            self.son_sicaklik = ort_sicaklik
+            self.son_nem = ort_nem
+            self.son_ruzgar = ort_ruzgar
+            
             # Arayüzü güncelle
             self.sicaklik_label.config(text=f"Ortalama Sıcaklık: {ort_sicaklik:.1f}°C")
             self.nem_label.config(text=f"Ortalama Nem: {ort_nem:.1f}%")
@@ -224,9 +254,24 @@ class HavaDurumuArayuz:
                 self.ortalama_enerji_label.config(text=f"Ortalama Enerji Seviyesi: {sonuc['ortalama_enerji']:.2f}%")
                 self.koordinator_label.config(text=f"Koordinatör Sensör: {list(self.sensor_noktalari.keys())[sonuc['koordinator']]}")
             
-            # Enerji tüketim tahminini göster
-            enerji_tuketimi = self.kaa_simulasyon.bulanik_mantik_kurallari(ort_sicaklik, ort_nem, ort_ruzgar)
-            self.enerji_tuketim_label.config(text=f"Tahmini Enerji Tüketimi: {enerji_tuketimi:.2f}%")
+            # Enerji tüketim tahminini hesapla ve göster
+            self.son_enerji_tuketimi = self.kaa_simulasyon.bulanik_mantik_kurallari(ort_sicaklik, ort_nem, ort_ruzgar)
+            self.enerji_tuketim_label.config(text=f"Tahmini Enerji Tüketimi: {self.son_enerji_tuketimi:.2f}%")
+            
+            # Üyelik derecelerini hesapla ve göster
+            sicaklik_derece = self.kaa_simulasyon.hesapla_sicaklik_uyelik(ort_sicaklik)
+            nem_derece = self.kaa_simulasyon.hesapla_nem_uyelik(ort_nem)
+            ruzgar_derece = self.kaa_simulasyon.hesapla_ruzgar_uyelik(ort_ruzgar)
+            
+            self.sicaklik_uyelik_label.config(
+                text=f"Sıcaklık Üyelik => Düşük: {sicaklik_derece['dusuk']:.2f}, Orta: {sicaklik_derece['orta']:.2f}, Yüksek: {sicaklik_derece['yuksek']:.2f}"
+            )
+            self.nem_uyelik_label.config(
+                text=f"Nem Üyelik => Düşük: {nem_derece['dusuk']:.2f}, Orta: {nem_derece['orta']:.2f}, Yüksek: {nem_derece['yuksek']:.2f}"
+            )
+            self.ruzgar_uyelik_label.config(
+                text=f"Rüzgar Üyelik => Yavaş: {ruzgar_derece['yavas']:.2f}, Orta: {ruzgar_derece['orta']:.2f}, Hızlı: {ruzgar_derece['hizli']:.2f}"
+            )
             
         except Exception as e:
             print(f"Hata oluştu: {e}")
@@ -335,6 +380,113 @@ class HavaDurumuArayuz:
             delattr(self, 'detay_pencere')
         
         self.detay_pencere.protocol("WM_DELETE_WINDOW", _on_closing)
+
+    def bulanik_mantik_detaylari_goster(self):
+        """Bulanık mantık detaylarını gösteren yeni pencere"""
+        detay_pencere = tk.Toplevel(self.root)
+        detay_pencere.title("Bulanık Mantık Sistem Detayları")
+        detay_pencere.geometry("800x600")
+        
+        # Pencereyi ekranın ortasına konumlandır
+        screen_width = detay_pencere.winfo_screenwidth()
+        screen_height = detay_pencere.winfo_screenheight()
+        x = (screen_width - 800) // 2
+        y = (screen_height - 600) // 2
+        detay_pencere.geometry(f"800x600+{x}+{y}")
+        
+        # Canvas ve scrollbar oluştur
+        canvas = tk.Canvas(detay_pencere)
+        scrollbar = ttk.Scrollbar(detay_pencere, orient="vertical", command=canvas.yview)
+        
+        # Frame oluştur
+        scrollable_frame = ttk.Frame(canvas)
+        scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+        
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+        
+        # Başlık
+        ttk.Label(
+            scrollable_frame,
+            text="BULANIK MANTIK SİSTEM ANALİZİ",
+            font=("Arial", 14, "bold")
+        ).pack(pady=10)
+        
+        # Giriş değişkenleri
+        giris_frame = ttk.LabelFrame(scrollable_frame, text="Giriş Değişkenleri")
+        giris_frame.pack(pady=10, padx=5, fill="x")
+        
+        ttk.Label(giris_frame, text="Sıcaklık (0-40°C):").pack(pady=5)
+        ttk.Label(giris_frame, text="• Düşük: 0-20°C").pack()
+        ttk.Label(giris_frame, text="• Orta: 15-35°C").pack()
+        ttk.Label(giris_frame, text="• Yüksek: 30-40°C").pack()
+        
+        ttk.Label(giris_frame, text="\nNem (%0-100):").pack(pady=5)
+        ttk.Label(giris_frame, text="• Düşük: 0-40%").pack()
+        ttk.Label(giris_frame, text="• Orta: 30-70%").pack()
+        ttk.Label(giris_frame, text="• Yüksek: 60-100%").pack()
+        
+        ttk.Label(giris_frame, text="\nRüzgar Hızı (0-20 m/s):").pack(pady=5)
+        ttk.Label(giris_frame, text="• Yavaş: 0-8 m/s").pack()
+        ttk.Label(giris_frame, text="• Orta: 6-14 m/s").pack()
+        ttk.Label(giris_frame, text="• Hızlı: 12-20 m/s").pack()
+        
+        # Çıkış değişkeni
+        cikis_frame = ttk.LabelFrame(scrollable_frame, text="Çıkış Değişkeni")
+        cikis_frame.pack(pady=10, padx=5, fill="x")
+        
+        ttk.Label(cikis_frame, text="Enerji Tüketimi (%0-100):").pack(pady=5)
+        ttk.Label(cikis_frame, text="• Çok Düşük: 0-25%").pack()
+        ttk.Label(cikis_frame, text="• Düşük: 20-50%").pack()
+        ttk.Label(cikis_frame, text="• Orta: 45-75%").pack()
+        ttk.Label(cikis_frame, text="• Yüksek: 70-100%").pack()
+        
+        # Bulanık kurallar
+        kural_frame = ttk.LabelFrame(scrollable_frame, text="Bulanık Mantık Kuralları")
+        kural_frame.pack(pady=10, padx=5, fill="x")
+        
+        kurallar = [
+            "1. EĞER sıcaklık düşük VE nem düşük VE rüzgar yavaş İSE, enerji tüketimi çok düşük",
+            "2. EĞER sıcaklık yüksek VEYA nem yüksek İSE, enerji tüketimi yüksek",
+            "3. EĞER sıcaklık orta VE nem orta VE rüzgar orta İSE, enerji tüketimi orta",
+            "4. EĞER sıcaklık düşük VE rüzgar hızlı İSE, enerji tüketimi düşük",
+            "5. EĞER nem yüksek VE rüzgar yavaş İSE, enerji tüketimi yüksek"
+        ]
+        
+        for kural in kurallar:
+            ttk.Label(kural_frame, text=kural).pack(pady=2)
+        
+        # Mevcut durum
+        durum_frame = ttk.LabelFrame(scrollable_frame, text="Mevcut Sistem Durumu")
+        durum_frame.pack(pady=10, padx=5, fill="x")
+        
+        if hasattr(self, 'son_sicaklik'):
+            ttk.Label(durum_frame, text=f"Sıcaklık: {self.son_sicaklik:.1f}°C").pack(pady=2)
+            ttk.Label(durum_frame, text=f"Nem: {self.son_nem:.1f}%").pack(pady=2)
+            ttk.Label(durum_frame, text=f"Rüzgar: {self.son_ruzgar:.1f} m/s").pack(pady=2)
+            ttk.Label(durum_frame, text=f"Hesaplanan Enerji Tüketimi: {self.son_enerji_tuketimi:.1f}%").pack(pady=2)
+        else:
+            ttk.Label(durum_frame, text="Henüz veri güncellenmedi").pack(pady=2)
+        
+        # Scrollbar'ı yerleştir
+        scrollbar.pack(side="right", fill="y")
+        canvas.pack(side="left", fill="both", expand=True)
+        
+        # Mouse wheel ile scroll yapabilme
+        def _on_mousewheel(event):
+            canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+        
+        canvas.bind_all("<MouseWheel>", _on_mousewheel)
+        
+        # Pencere kapatıldığında bind'ı kaldır
+        def _on_closing():
+            canvas.unbind_all("<MouseWheel>")
+            detay_pencere.destroy()
+        
+        detay_pencere.protocol("WM_DELETE_WINDOW", _on_closing)
 
 class KAASimulasyon:
     def __init__(self):
@@ -494,6 +646,30 @@ class KAASimulasyon:
             'aktif_sensor_sayisi': len(aktif_sensorler),
             'ortalama_enerji': np.mean([self.sensor_durumlari[node]['enerji_seviyesi'] 
                                       for node in aktif_sensorler])
+        }
+
+    def hesapla_sicaklik_uyelik(self, sicaklik):
+        """Sıcaklık için üyelik derecelerini hesaplar"""
+        return {
+            'dusuk': fuzz.interp_membership(self.sicaklik_universe, self.sicaklik_uyelik['dusuk'], sicaklik),
+            'orta': fuzz.interp_membership(self.sicaklik_universe, self.sicaklik_uyelik['orta'], sicaklik),
+            'yuksek': fuzz.interp_membership(self.sicaklik_universe, self.sicaklik_uyelik['yuksek'], sicaklik)
+        }
+    
+    def hesapla_nem_uyelik(self, nem):
+        """Nem için üyelik derecelerini hesaplar"""
+        return {
+            'dusuk': fuzz.interp_membership(self.nem_universe, self.nem_uyelik['dusuk'], nem),
+            'orta': fuzz.interp_membership(self.nem_universe, self.nem_uyelik['orta'], nem),
+            'yuksek': fuzz.interp_membership(self.nem_universe, self.nem_uyelik['yuksek'], nem)
+        }
+    
+    def hesapla_ruzgar_uyelik(self, ruzgar):
+        """Rüzgar hızı için üyelik derecelerini hesaplar"""
+        return {
+            'yavas': fuzz.interp_membership(self.ruzgar_universe, self.ruzgar_uyelik['yavas'], ruzgar),
+            'orta': fuzz.interp_membership(self.ruzgar_universe, self.ruzgar_uyelik['orta'], ruzgar),
+            'hizli': fuzz.interp_membership(self.ruzgar_universe, self.ruzgar_uyelik['hizli'], ruzgar)
         }
 
 def main():
