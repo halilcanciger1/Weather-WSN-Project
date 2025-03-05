@@ -1,0 +1,8 @@
+numpy
+scikit-fuzzy
+networkx
+pandas
+scipy
+requests
+folium
+pywebview 
