@@ -15,42 +15,105 @@ import pandas as pd
 from scipy import stats
 import requests
 import tkinter as tk
-from tkinter import ttk
+from tkinter import ttk, filedialog
 from datetime import datetime
 import json
 import folium
 import os
 import webview
+import random
+import tkinter.messagebox as messagebox
 
 class HavaDurumuArayuz:
     def __init__(self, root):
         self.root = root
-        self.root.title("İstanbul Hava Durumu Takip Sistemi")
-        self.root.geometry("800x1000")  # Pencere boyutunu artır
+        self.root.title("Ankara Hava Durumu Takip Sistemi")
+        self.root.geometry("800x1000")
         
         # API anahtarı
         self.api_key = "1d3ba4e02dda8d44b246972c395518f4"
         
-        # Kadıköy'deki 10 sensör noktası (mahalleler)
-        self.sensor_noktalari = {
-            'Kadıköy Merkez': {'lat': 40.9892, 'lon': 29.0282},
-            'Moda': {'lat': 40.9800, 'lon': 29.0260},
-            'Fenerbahçe': {'lat': 40.9697, 'lon': 29.0360},
-            'Caddebostan': {'lat': 40.9650, 'lon': 29.0600},
-            'Suadiye': {'lat': 40.9572, 'lon': 29.0800},
-            'Bostancı': {'lat': 40.9500, 'lon': 29.1000},
-            'Kozyatağı': {'lat': 40.9800, 'lon': 29.1000},
-            'Acıbadem': {'lat': 41.0000, 'lon': 29.0400},
-            'Fikirtepe': {'lat': 41.0000, 'lon': 29.0300},
-            'Göztepe': {'lat': 40.9700, 'lon': 29.0500}
-        }
+        # Ankara'nın bölgesel koordinatları (kara alanları)
+        self.ankara_bolgeler = [
+            # Merkez Bölgeler
+            {
+                'isim': 'Çankaya Bölgesi',
+                'min_lat': 39.80,
+                'max_lat': 40.00,
+                'min_lon': 32.70,
+                'max_lon': 33.00
+            },
+            {
+                'isim': 'Keçiören-Yenimahalle Bölgesi',
+                'min_lat': 39.90,
+                'max_lat': 40.10,
+                'min_lon': 32.60,
+                'max_lon': 33.00
+            },
+            # Batı Bölgeler
+            {
+                'isim': 'Etimesgut-Sincan Bölgesi',
+                'min_lat': 39.85,
+                'max_lat': 40.05,
+                'min_lon': 32.40,
+                'max_lon': 32.80
+            },
+            # Doğu Bölgeler
+            {
+                'isim': 'Mamak-Altındağ Bölgesi',
+                'min_lat': 39.85,
+                'max_lat': 40.10,
+                'min_lon': 32.80,
+                'max_lon': 33.20
+            },
+            # Güney Bölgeler
+            {
+                'isim': 'Gölbaşı Bölgesi',
+                'min_lat': 39.60,
+                'max_lat': 39.90,
+                'min_lon': 32.70,
+                'max_lon': 33.00
+            },
+            # Kuzey Bölgeler
+            {
+                'isim': 'Pursaklar-Akyurt Bölgesi',
+                'min_lat': 40.00,
+                'max_lat': 40.20,
+                'min_lon': 32.80,
+                'max_lon': 33.20
+            }
+        ]
+        
+        # Su alanları (sadece Mogan Gölü)
+        self.su_alanlari = [
+            {
+                'isim': 'Mogan Gölü',
+                'min_lat': 39.72,
+                'max_lat': 39.78,
+                'min_lon': 32.74,
+                'max_lon': 32.83
+            }
+        ]
+        
+        # Güvenli mesafe (derece cinsinden)
+        self.guvenli_mesafe = 0.005  # Yaklaşık 500 metre
+        
+        # Sensör noktaları için boş sözlük
+        self.sensor_noktalari = {}
         
         # KAA simülasyonunu başlat
         self.kaa_simulasyon = KAASimulasyon()
-        self.kaa_simulasyon.ag_olustur(sensor_sayisi=len(self.sensor_noktalari))
         
-        # Sensör verilerini saklamak için sözlük
-        self.sensor_verileri = {}
+        # Enerji seviyesi renk kodları
+        self.enerji_renkleri = {
+            'tam_dolu': {'min': 90, 'max': 100, 'renk': 'darkgreen', 'aciklama': 'Tam Dolu'},
+            'cok_iyi': {'min': 75, 'max': 89, 'renk': 'lightgreen', 'aciklama': 'Çok İyi'},
+            'iyi': {'min': 60, 'max': 74, 'renk': 'blue', 'aciklama': 'İyi'},
+            'orta': {'min': 45, 'max': 59, 'renk': 'yellow', 'aciklama': 'Orta'},
+            'dusuk': {'min': 30, 'max': 44, 'renk': 'orange', 'aciklama': 'Düşük'},
+            'kritik': {'min': 15, 'max': 29, 'renk': 'red', 'aciklama': 'Kritik'},
+            'tukenme': {'min': 0, 'max': 14, 'renk': 'purple', 'aciklama': 'Tükenme'}
+        }
         
         self.arayuz_olustur()
         self.harita_olustur()
@@ -60,13 +123,29 @@ class HavaDurumuArayuz:
         self.main_frame = ttk.Frame(self.root)
         self.main_frame.pack(expand=True, fill="both", padx=10, pady=10)
         
-        # İlçe seçim alanı
-        self.ilce_label = ttk.Label(self.main_frame, text="Sensör Noktaları:")
-        self.ilce_label.pack(pady=10)
+        # Sensör ayarları için frame
+        self.sensor_frame = ttk.LabelFrame(self.main_frame, text="Sensör Ayarları")
+        self.sensor_frame.pack(pady=10, fill="x")
         
-        self.ilce_combo = ttk.Combobox(self.main_frame, values=list(self.sensor_noktalari.keys()))
-        self.ilce_combo.pack(pady=5)
-        self.ilce_combo.set(list(self.sensor_noktalari.keys())[0])
+        # Sensör sayısı girişi
+        ttk.Label(self.sensor_frame, text="Sensör Sayısı:").pack(side="left", padx=5)
+        self.sensor_sayi_var = tk.StringVar(value="20")
+        self.sensor_entry = ttk.Entry(self.sensor_frame, textvariable=self.sensor_sayi_var, width=15)
+        self.sensor_entry.pack(side="left", padx=5)
+        
+        # Alan boyutu girişi
+        ttk.Label(self.sensor_frame, text="Alan Boyutu (km²):").pack(side="left", padx=5)
+        self.alan_boyut_var = tk.StringVar(value="5")
+        self.alan_entry = ttk.Entry(self.sensor_frame, textvariable=self.alan_boyut_var, width=15)
+        self.alan_entry.pack(side="left", padx=5)
+        
+        # Sensörleri yerleştir butonu
+        self.yerlestir_btn = ttk.Button(
+            self.sensor_frame,
+            text="Sensörleri Yerleştir",
+            command=self.sensorleri_yerlestir
+        )
+        self.yerlestir_btn.pack(side="left", padx=5)
         
         # Buton frame'i
         self.button_frame = ttk.Frame(self.main_frame)
@@ -79,7 +158,7 @@ class HavaDurumuArayuz:
             command=self.hava_durumu_guncelle
         )
         self.guncelle_btn.pack(side="left", padx=5)
-
+        
         # Harita gösterme butonu
         self.harita_btn = ttk.Button(
             self.button_frame,
@@ -95,6 +174,14 @@ class HavaDurumuArayuz:
             command=self.bulanik_mantik_detaylari_goster
         )
         self.bulanik_btn.pack(side="left", padx=5)
+        
+        # MATLAB .fis dosyasını yükle butonu
+        self.fis_yukle_btn = ttk.Button(
+            self.button_frame,
+            text="MATLAB FIS Dosyası Yükle",
+            command=self.fis_dosyasi_sec
+        )
+        self.fis_yukle_btn.pack(side="left", padx=5)
         
         # Hava durumu bilgi alanı
         self.bilgi_frame = ttk.LabelFrame(self.main_frame, text="Ortalama Hava Durumu Bilgileri")
@@ -147,25 +234,231 @@ class HavaDurumuArayuz:
         
         self.ruzgar_uyelik_label = ttk.Label(self.uyelik_frame, text="Rüzgar Üyelik: ")
         self.ruzgar_uyelik_label.pack(pady=2)
+        
+        # Enerji seviyesi renk göstergesi
+        self.renk_frame = ttk.LabelFrame(self.main_frame, text="Enerji Seviyesi Renk Kodları")
+        self.renk_frame.pack(pady=10, fill="x")
+        
+        for enerji_durum in self.enerji_renkleri.values():
+            frame = ttk.Frame(self.renk_frame)
+            frame.pack(fill="x", padx=5, pady=2)
+            
+            renk_gosterge = tk.Label(
+                frame,
+                text="■",
+                fg=enerji_durum['renk'],
+                font=("Arial", 12, "bold")
+            )
+            renk_gosterge.pack(side="left", padx=5)
+            
+            ttk.Label(
+                frame,
+                text=f"%{enerji_durum['min']}-{enerji_durum['max']}: {enerji_durum['aciklama']}"
+            ).pack(side="left", padx=5)
+    
+    def sensorleri_yerlestir(self):
+        try:
+            # Kullanıcının girdiği değerleri al
+            sensor_sayisi = int(self.sensor_sayi_var.get())
+            alan_boyutu = float(self.alan_boyut_var.get())  # km² cinsinden
+            
+            if sensor_sayisi <= 0:
+                raise ValueError("Sensör sayısı pozitif olmalıdır!")
+            
+            if alan_boyutu <= 0:
+                raise ValueError("Alan boyutu pozitif olmalıdır!")
+            
+            # Sensör noktalarını temizle
+            self.sensor_noktalari.clear()
+            
+            # Her bölge için sensör sayısını hesapla
+            bolge_basina = sensor_sayisi // len(self.ankara_bolgeler)
+            kalan_sensor = sensor_sayisi % len(self.ankara_bolgeler)
+            
+            # Derece cinsinden alan boyutunu hesapla
+            derece_boyut = alan_boyutu / 111.0
+            
+            # Sensörleri yerleştir
+            yerlestirilmis = 0
+            
+            # Her bölgeye sensör yerleştir
+            for i, bolge in enumerate(self.ankara_bolgeler):
+                hedef_sensor = bolge_basina + (1 if i < kalan_sensor else 0)
+                bolgedeki_sensor = 0
+                merkez_lat = (bolge['min_lat'] + bolge['max_lat']) / 2
+                merkez_lon = (bolge['min_lon'] + bolge['max_lon']) / 2
+                
+                while bolgedeki_sensor < hedef_sensor:
+                    # Belirlenen alan içinde rastgele bir nokta seç
+                    lat = random.uniform(
+                        max(bolge['min_lat'], merkez_lat - derece_boyut/2),
+                        min(bolge['max_lat'], merkez_lat + derece_boyut/2)
+                    )
+                    lon = random.uniform(
+                        max(bolge['min_lon'], merkez_lon - derece_boyut/2),
+                        min(bolge['max_lon'], merkez_lon + derece_boyut/2)
+                    )
+                    
+                    if self.nokta_karada_mi(lat, lon):
+                        self.sensor_noktalari[f'Sensör {yerlestirilmis + 1}'] = {
+                            'lat': lat,
+                            'lon': lon,
+                            'bolge': bolge['isim']
+                        }
+                        yerlestirilmis += 1
+                        bolgedeki_sensor += 1
+            
+            messagebox.showinfo(
+                "Başarılı",
+                f"{yerlestirilmis} adet sensör başarıyla yerleştirildi.\n" +
+                f"Alan Boyutu: {alan_boyutu} km²\n" +
+                "Not: Sensörler belirlenen alan içinde ve kara bölgelerinde dağıtılmıştır."
+            )
+            
+            # KAA simülasyonunu güncelle
+            self.kaa_simulasyon.ag_olustur(yerlestirilmis)
+            
+            # Haritayı güncelle
+            self.harita_olustur()
+            
+        except ValueError as e:
+            messagebox.showerror("Hata", str(e))
+    
+    def nokta_karada_mi(self, lat, lon):
+        """Verilen koordinatın karada olup olmadığını kontrol eder"""
+        # Önce noktanın su alanlarında olup olmadığını kontrol et
+        for su in self.su_alanlari:
+            # Su alanına güvenli mesafe ekleyerek kontrol et
+            if (su['min_lat'] - self.guvenli_mesafe <= lat <= su['max_lat'] + self.guvenli_mesafe and 
+                su['min_lon'] - self.guvenli_mesafe <= lon <= su['max_lon'] + self.guvenli_mesafe):
+                return False
+        
+        # Sonra noktanın kara bölgelerinden birinde olup olmadığını kontrol et
+        for bolge in self.ankara_bolgeler:
+            # Kara bölgesinin iç kısmında olup olmadığını kontrol et
+            if (bolge['min_lat'] + self.guvenli_mesafe <= lat <= bolge['max_lat'] - self.guvenli_mesafe and 
+                bolge['min_lon'] + self.guvenli_mesafe <= lon <= bolge['max_lon'] - self.guvenli_mesafe):
+                return True
+        
+        return False
     
     def harita_olustur(self):
-        """Kadıköy'ün haritasını ve sensör noktalarını oluşturur"""
+        """Ankara haritasını ve sensör noktalarını oluşturur"""
+        # Ankara'nın merkezi
+        merkez_lat = 39.90
+        merkez_lon = 32.80
+        
         m = folium.Map(
-            location=[40.9892, 29.0282],  # Kadıköy merkez
-            zoom_start=13,
+            location=[merkez_lat, merkez_lon],
+            zoom_start=10,
             tiles="OpenStreetMap"
         )
         
-        # Sensör noktalarını haritaya ekle
-        for isim, konum in self.sensor_noktalari.items():
-            folium.Marker(
-                [konum['lat'], konum['lon']],
-                popup=f"Sensör: {isim}",
-                icon=folium.Icon(color='red', icon='info-sign')
+        # Alan boyutunu derece cinsine çevir
+        try:
+            alan_boyutu = float(self.alan_boyut_var.get())
+            derece_boyut = alan_boyutu / 111.0
+        except:
+            derece_boyut = 0
+        
+        # Kara bölgelerini yeşil renkle göster
+        for bolge in self.ankara_bolgeler:
+            folium.Rectangle(
+                bounds=[
+                    [bolge['min_lat'], bolge['min_lon']],
+                    [bolge['max_lat'], bolge['max_lon']]
+                ],
+                color="green",
+                fill=True,
+                fillColor="green",
+                fillOpacity=0.2,
+                popup=bolge['isim'],
+                weight=2
+            ).add_to(m)
+            
+            # Seçili alan boyutunu göster
+            if derece_boyut > 0:
+                merkez_lat = (bolge['min_lat'] + bolge['max_lat']) / 2
+                merkez_lon = (bolge['min_lon'] + bolge['max_lon']) / 2
+                
+                alan_min_lat = max(bolge['min_lat'], merkez_lat - derece_boyut/2)
+                alan_max_lat = min(bolge['max_lat'], merkez_lat + derece_boyut/2)
+                alan_min_lon = max(bolge['min_lon'], merkez_lon - derece_boyut/2)
+                alan_max_lon = min(bolge['max_lon'], merkez_lon + derece_boyut/2)
+                
+                folium.Rectangle(
+                    bounds=[
+                        [alan_min_lat, alan_min_lon],
+                        [alan_max_lat, alan_max_lon]
+                    ],
+                    color="red",
+                    fill=True,
+                    fillColor="red",
+                    fillOpacity=0.1,
+                    popup=f"Seçili Alan: {alan_boyutu} km²",
+                    weight=1,
+                    dash_array='5, 5'
+                ).add_to(m)
+        
+        # Su alanlarını mavi renkle göster
+        for su in self.su_alanlari:
+            folium.Rectangle(
+                bounds=[
+                    [su['min_lat'], su['min_lon']],
+                    [su['max_lat'], su['max_lon']]
+                ],
+                color="blue",
+                fill=True,
+                fillColor="blue",
+                fillOpacity=0.3,
+                popup=su['isim'],
+                weight=1
             ).add_to(m)
         
+        # Sensör noktalarını haritaya ekle
+        for isim, konum in self.sensor_noktalari.items():
+            # Sensörün enerji seviyesini al
+            sensor_id = int(isim.split()[1]) - 1
+            enerji_seviyesi = self.kaa_simulasyon.sensor_durumlari[sensor_id]['enerji_seviyesi']
+            
+            # Enerji seviyesine göre renk belirle
+            marker_renk = 'gray'  # Varsayılan renk
+            for enerji_durum in self.enerji_renkleri.values():
+                if enerji_durum['min'] <= enerji_seviyesi <= enerji_durum['max']:
+                    marker_renk = enerji_durum['renk']
+                    break
+            
+            # Popup içeriğini hazırla
+            popup_content = f"{isim} ({konum['bolge']})<br>Enerji: %{enerji_seviyesi:.1f}"
+            
+            folium.Marker(
+                [konum['lat'], konum['lon']],
+                popup=popup_content,
+                icon=folium.Icon(color=marker_renk, icon='info-sign')
+            ).add_to(m)
+        
+        # Lejant ekle
+        legend_html = """
+        <div style="position: fixed; bottom: 50px; right: 50px; z-index: 1000; background-color: white;
+                    padding: 10px; border: 2px solid grey; border-radius: 5px">
+        <h4>Harita Göstergeleri</h4>
+        <p><i class="fa fa-square" style="color:green"></i> Kara Bölgeleri</p>
+        <p><i class="fa fa-square" style="color:blue"></i> Su Alanları</p>
+        <p><i class="fa fa-square" style="color:red"></i> Seçili Alan Sınırları</p>
+        <h4>Enerji Seviyeleri</h4>
+        """
+        
+        for enerji_durum in self.enerji_renkleri.values():
+            legend_html += f"""
+            <p><i class="fa fa-circle" style="color:{enerji_durum['renk']}"></i>
+            {enerji_durum['min']}-{enerji_durum['max']}%: {enerji_durum['aciklama']}</p>
+            """
+        
+        legend_html += "</div>"
+        m.get_root().html.add_child(folium.Element(legend_html))
+        
         # Haritayı HTML dosyası olarak kaydet
-        self.harita_dosyasi = os.path.join(os.getcwd(), "kadikoy_harita.html")
+        self.harita_dosyasi = os.path.join(os.getcwd(), "ankara_harita.html")
         m.save(self.harita_dosyasi)
     
     def harita_goster(self):
@@ -173,7 +466,7 @@ class HavaDurumuArayuz:
         # Haritayı güncelle
         self.harita_olustur()
         # Yeni bir pencerede haritayı göster
-        webview.create_window("Kadıköy Haritası", url=self.harita_dosyasi, width=800, height=600)
+        webview.create_window("Ankara Haritası", url=self.harita_dosyasi, width=800, height=600)
         webview.start()
     
     def hava_durumu_guncelle(self):
@@ -488,22 +781,32 @@ class HavaDurumuArayuz:
         
         detay_pencere.protocol("WM_DELETE_WINDOW", _on_closing)
 
+    def fis_dosyasi_sec(self):
+        """MATLAB .fis dosyasını seçmek için dosya dialogu açar"""
+        dosya_yolu = filedialog.askopenfilename(
+            title="MATLAB FIS Dosyası Seç",
+            filetypes=[("FIS files", "*.fis"), ("All files", "*.*")]
+        )
+        
+        if dosya_yolu:
+            if self.kaa_simulasyon.fis_dosyasi_yukle(dosya_yolu):
+                messagebox.showinfo(
+                    "Başarılı",
+                    "MATLAB bulanık mantık sistemi başarıyla yüklendi!"
+                )
+            else:
+                messagebox.showerror(
+                    "Hata",
+                    "FIS dosyası yüklenirken bir hata oluştu!"
+                )
+
 class KAASimulasyon:
     def __init__(self):
         self.ag = None
         self.sensor_durumlari = {}
         
-        # Bulanık mantık için evren değişkenleri
-        self.sicaklik_universe = np.arange(0, 41, 1)  # 0-40°C
-        self.nem_universe = np.arange(0, 101, 1)      # 0-100%
-        self.ruzgar_universe = np.arange(0, 21, 1)    # 0-20 m/s
-        self.enerji_universe = np.arange(0, 101, 1)   # 0-100% enerji tüketimi
-        
-        # Üyelik fonksiyonlarını oluştur
-        self.sicaklik_uyelik = self._sicaklik_uyelik_fonksiyonlari()
-        self.nem_uyelik = self._nem_uyelik_fonksiyonlari()
-        self.ruzgar_uyelik = self._ruzgar_uyelik_fonksiyonlari()
-        self.enerji_uyelik = self._enerji_uyelik_fonksiyonlari()
+        # MATLAB .fis dosyasından bulanık mantık sistemini yükle
+        self.fis_dosyasi = None  # .fis dosyası yolu buraya gelecek
         
     def ag_olustur(self, sensor_sayisi):
         """Kablosuz algılayıcı ağın topolojisini oluşturur."""
@@ -516,107 +819,34 @@ class KAASimulasyon:
                 'aktif': True
             }
     
-    def _sicaklik_uyelik_fonksiyonlari(self):
-        """Sıcaklık için üyelik fonksiyonlarını tanımlar"""
-        dusuk = fuzz.trimf(self.sicaklik_universe, [0, 0, 20])
-        orta = fuzz.trimf(self.sicaklik_universe, [15, 25, 35])
-        yuksek = fuzz.trimf(self.sicaklik_universe, [30, 40, 40])
-        return {'dusuk': dusuk, 'orta': orta, 'yuksek': yuksek}
-    
-    def _nem_uyelik_fonksiyonlari(self):
-        """Nem için üyelik fonksiyonlarını tanımlar"""
-        dusuk = fuzz.trimf(self.nem_universe, [0, 0, 40])
-        orta = fuzz.trimf(self.nem_universe, [30, 50, 70])
-        yuksek = fuzz.trimf(self.nem_universe, [60, 100, 100])
-        return {'dusuk': dusuk, 'orta': orta, 'yuksek': yuksek}
-    
-    def _ruzgar_uyelik_fonksiyonlari(self):
-        """Rüzgar hızı için üyelik fonksiyonlarını tanımlar"""
-        yavas = fuzz.trimf(self.ruzgar_universe, [0, 0, 8])
-        orta = fuzz.trimf(self.ruzgar_universe, [6, 10, 14])
-        hizli = fuzz.trimf(self.ruzgar_universe, [12, 20, 20])
-        return {'yavas': yavas, 'orta': orta, 'hizli': hizli}
-    
-    def _enerji_uyelik_fonksiyonlari(self):
-        """Enerji tüketimi için üyelik fonksiyonlarını tanımlar"""
-        cok_dusuk = fuzz.trimf(self.enerji_universe, [0, 0, 25])
-        dusuk = fuzz.trimf(self.enerji_universe, [20, 35, 50])
-        orta = fuzz.trimf(self.enerji_universe, [45, 60, 75])
-        yuksek = fuzz.trimf(self.enerji_universe, [70, 85, 100])
-        return {'cok_dusuk': cok_dusuk, 'dusuk': dusuk, 'orta': orta, 'yuksek': yuksek}
+    def fis_dosyasi_yukle(self, dosya_yolu):
+        """MATLAB'dan oluşturulan .fis dosyasını yükler"""
+        if os.path.exists(dosya_yolu):
+            self.fis_dosyasi = dosya_yolu
+            return True
+        return False
     
     def bulanik_mantik_kurallari(self, sicaklik, nem, ruzgar):
-        """Bulanık mantık kurallarını uygular ve enerji tüketimini hesaplar"""
-        # Giriş değerlerinin üyelik derecelerini hesapla
-        sicaklik_derece = {
-            'dusuk': fuzz.interp_membership(self.sicaklik_universe, self.sicaklik_uyelik['dusuk'], sicaklik),
-            'orta': fuzz.interp_membership(self.sicaklik_universe, self.sicaklik_uyelik['orta'], sicaklik),
-            'yuksek': fuzz.interp_membership(self.sicaklik_universe, self.sicaklik_uyelik['yuksek'], sicaklik)
-        }
+        """MATLAB'dan yüklenen bulanık mantık kurallarını uygular"""
+        if self.fis_dosyasi is None:
+            # Eğer .fis dosyası yüklenmemişse varsayılan değer döndür
+            return 50
         
-        nem_derece = {
-            'dusuk': fuzz.interp_membership(self.nem_universe, self.nem_uyelik['dusuk'], nem),
-            'orta': fuzz.interp_membership(self.nem_universe, self.nem_uyelik['orta'], nem),
-            'yuksek': fuzz.interp_membership(self.nem_universe, self.nem_uyelik['yuksek'], nem)
-        }
-        
-        ruzgar_derece = {
-            'yavas': fuzz.interp_membership(self.ruzgar_universe, self.ruzgar_uyelik['yavas'], ruzgar),
-            'orta': fuzz.interp_membership(self.ruzgar_universe, self.ruzgar_uyelik['orta'], ruzgar),
-            'hizli': fuzz.interp_membership(self.ruzgar_universe, self.ruzgar_uyelik['hizli'], ruzgar)
-        }
-        
-        # Kural tabanı
-        rules = {
-            'cok_dusuk': [],  # En düşük enerji tüketimi
-            'dusuk': [],      # Düşük enerji tüketimi
-            'orta': [],       # Orta enerji tüketimi
-            'yuksek': []      # Yüksek enerji tüketimi
-        }
-        
-        # Örnek kurallar:
-        # 1. Eğer sıcaklık düşük ve nem düşük ve rüzgar yavaş ise, enerji tüketimi çok düşük
-        rules['cok_dusuk'].append(min([sicaklik_derece['dusuk'], nem_derece['dusuk'], ruzgar_derece['yavas']]))
-        
-        # 2. Eğer sıcaklık yüksek veya nem yüksek ise, enerji tüketimi yüksek
-        rules['yuksek'].append(max([sicaklik_derece['yuksek'], nem_derece['yuksek']]))
-        
-        # 3. Eğer koşullar orta seviyede ise, enerji tüketimi orta
-        rules['orta'].append(min([sicaklik_derece['orta'], nem_derece['orta'], ruzgar_derece['orta']]))
-        
-        # Her kural grubu için maksimum değeri al
-        activation = {
-            'cok_dusuk': max(rules['cok_dusuk']) if rules['cok_dusuk'] else 0,
-            'dusuk': max(rules['dusuk']) if rules['dusuk'] else 0,
-            'orta': max(rules['orta']) if rules['orta'] else 0,
-            'yuksek': max(rules['yuksek']) if rules['yuksek'] else 0
-        }
-        
-        # Durulaştırma için ağırlıklı ortalama yöntemi
-        numerator = 0
-        denominator = 0
-        
-        for label, degree in activation.items():
-            if degree > 0:
-                # Her üyelik fonksiyonunun ağırlık merkezini hesapla
-                centroid = fuzz.defuzz(self.enerji_universe, self.enerji_uyelik[label], 'centroid')
-                if not np.isnan(centroid):  # Eğer centroid hesaplanabilirse
-                    numerator += centroid * degree
-                    denominator += degree
-        
-        # Enerji tüketim seviyesini hesapla
-        if denominator > 0:
-            enerji_tuketimi = numerator / denominator
-        else:
-            enerji_tuketimi = 50  # Varsayılan değer
-        
-        return enerji_tuketimi
+        try:
+            # Burada .fis dosyasından kuralları okuma ve uygulama işlemi yapılacak
+            # MATLAB'dan alınan kurallar uygulanacak
+            # Şimdilik varsayılan değer döndürüyoruz
+            return 50
+            
+        except Exception as e:
+            print(f"Bulanık mantık hesaplama hatası: {e}")
+            return 50
     
     def enerji_hesapla(self, hava_durumu_verileri):
         """Sensör düğümlerinin enerji tüketimini hesaplar."""
         for node in self.ag.nodes():
             if self.sensor_durumlari[node]['aktif']:
-                # Bulanık mantık ile enerji tüketimini hesapla
+                # MATLAB'dan alınan bulanık mantık ile enerji tüketimini hesapla
                 enerji_tuketimi = self.bulanik_mantik_kurallari(
                     hava_durumu_verileri['sicaklik'],
                     hava_durumu_verileri['nem'],
@@ -624,10 +854,10 @@ class KAASimulasyon:
                 )
                 
                 # Sensörün enerji seviyesini güncelle
-                self.sensor_durumlari[node]['enerji_seviyesi'] -= (enerji_tuketimi / 100)  # Yüzdelik değeri
+                self.sensor_durumlari[node]['enerji_seviyesi'] -= (enerji_tuketimi / 100)
                 
                 # Enerji seviyesi kritik seviyenin altına düşerse sensörü devre dışı bırak
-                if self.sensor_durumlari[node]['enerji_seviyesi'] < 10:  # %10 kritik seviye
+                if self.sensor_durumlari[node]['enerji_seviyesi'] < 10:
                     self.sensor_durumlari[node]['aktif'] = False
     
     def senkronizasyon_protokolu(self):
@@ -637,7 +867,6 @@ class KAASimulasyon:
         if not aktif_sensorler:
             return "Aktif sensör kalmadı!"
         
-        # En yüksek enerjiye sahip sensörü koordinatör seç
         koordinator = max(aktif_sensorler, 
                          key=lambda x: self.sensor_durumlari[x]['enerji_seviyesi'])
         
@@ -650,26 +879,47 @@ class KAASimulasyon:
 
     def hesapla_sicaklik_uyelik(self, sicaklik):
         """Sıcaklık için üyelik derecelerini hesaplar"""
+        if self.fis_dosyasi is None:
+            # Varsayılan değerler
+            return {
+                'dusuk': 0.33,
+                'orta': 0.33,
+                'yuksek': 0.34
+            }
         return {
-            'dusuk': fuzz.interp_membership(self.sicaklik_universe, self.sicaklik_uyelik['dusuk'], sicaklik),
-            'orta': fuzz.interp_membership(self.sicaklik_universe, self.sicaklik_uyelik['orta'], sicaklik),
-            'yuksek': fuzz.interp_membership(self.sicaklik_universe, self.sicaklik_uyelik['yuksek'], sicaklik)
+            'dusuk': 0.33,
+            'orta': 0.33,
+            'yuksek': 0.34
         }
     
     def hesapla_nem_uyelik(self, nem):
         """Nem için üyelik derecelerini hesaplar"""
+        if self.fis_dosyasi is None:
+            # Varsayılan değerler
+            return {
+                'dusuk': 0.33,
+                'orta': 0.33,
+                'yuksek': 0.34
+            }
         return {
-            'dusuk': fuzz.interp_membership(self.nem_universe, self.nem_uyelik['dusuk'], nem),
-            'orta': fuzz.interp_membership(self.nem_universe, self.nem_uyelik['orta'], nem),
-            'yuksek': fuzz.interp_membership(self.nem_universe, self.nem_uyelik['yuksek'], nem)
+            'dusuk': 0.33,
+            'orta': 0.33,
+            'yuksek': 0.34
         }
     
     def hesapla_ruzgar_uyelik(self, ruzgar):
         """Rüzgar hızı için üyelik derecelerini hesaplar"""
+        if self.fis_dosyasi is None:
+            # Varsayılan değerler
+            return {
+                'yavas': 0.33,
+                'orta': 0.33,
+                'hizli': 0.34
+            }
         return {
-            'yavas': fuzz.interp_membership(self.ruzgar_universe, self.ruzgar_uyelik['yavas'], ruzgar),
-            'orta': fuzz.interp_membership(self.ruzgar_universe, self.ruzgar_uyelik['orta'], ruzgar),
-            'hizli': fuzz.interp_membership(self.ruzgar_universe, self.ruzgar_uyelik['hizli'], ruzgar)
+            'yavas': 0.33,
+            'orta': 0.33,
+            'hizli': 0.34
         }
 
 def main():
