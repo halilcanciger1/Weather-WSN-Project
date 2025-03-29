@@ -1,0 +1,77 @@
+[System]
+Name='ankara_sensor_agi'
+Type='mamdani'
+Version=2.0
+NumInputs=4
+NumOutputs=1
+NumRules=19
+AndMethod='min'
+OrMethod='max'
+ImpMethod='min'
+AggMethod='max'
+DefuzzMethod='centroid'
+
+[Input1]
+Name='pil_seviyesi'
+Range=[0 100]
+NumMFs=5
+MF1='cok_kotu':'trapmf',[0 0 20 20]
+MF2='kotu':'trapmf',[20 21 40 40]
+MF3='orta':'trapmf',[40 41 60 60]
+MF4='iyi':'trapmf',[60 61 80 80]
+MF5='cok_iyi':'trapmf',[80 81 100 100]
+
+[Input2]
+Name='nem'
+Range=[0 950]
+NumMFs=3
+MF1='kuru_toprak':'trapmf',[0 0 250 300]
+MF2='nemli_toprak':'trimf',[300 500 700]
+MF3='suda':'trapmf',[700 800 950 950]
+
+[Input3]
+Name='basinc'
+Range=[-1 1]
+NumMFs=3
+MF1='dusuk':'trapmf',[-1 -1 -0.5 -0.4]
+MF2='normal':'trimf',[-0.4 0 0.4]
+MF3='yuksek':'trapmf',[0.4 0.5 1 1]
+
+[Input4]
+Name='ph'
+Range=[0 14]
+NumMFs=3
+MF1='asidik':'trapmf',[0 0 6.8 6.9]
+MF2='notr':'trimf',[6.9 7 7.1]
+MF3='bazik':'trapmf',[7.1 7.2 14 14]
+
+[Output1]
+Name='enerji_tuketimi'
+Range=[0 100]
+NumMFs=5
+MF1='minimum':'trapmf',[0 0 20 20]
+MF2='dusuk':'trapmf',[20 21 40 40]
+MF3='normal':'trapmf',[40 41 60 60]
+MF4='yuksek':'trapmf',[60 61 80 80]
+MF5='cok_yuksek':'trapmf',[80 81 100 100]
+
+[Rules]
+1 0 0 0, 5 (1) : 1
+2 0 0 0, 4 (1) : 1
+3 0 0 0, 3 (1) : 1
+4 0 0 0, 2 (1) : 1
+5 0 0 0, 1 (1) : 1
+0 1 0 0, 3 (1) : 1
+0 2 0 0, 2 (1) : 1
+0 3 0 0, 4 (1) : 1
+0 0 0 1, 4 (1) : 1
+0 0 0 2, 2 (1) : 1
+0 0 0 3, 4 (1) : 1
+0 0 1 0, 4 (1) : 1
+0 0 2 0, 2 (1) : 1
+0 0 3 0, 4 (1) : 1
+5 2 2 2, 1 (1) : 1
+1 0 0 1, 5 (1) : 1
+3 3 0 0, 4 (1) : 1
+3 2 2 2, 3 (1) : 1
+4 2 2 2, 2 (1) : 1 

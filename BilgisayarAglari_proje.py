@@ -23,12 +23,37 @@ import os
 import webview
 import random
 import tkinter.messagebox as messagebox
+import skfuzzy.control as ctrl
 
 class HavaDurumuArayuz:
     def __init__(self, root):
         self.root = root
-        self.root.title("Ankara Hava Durumu Takip Sistemi")
-        self.root.geometry("800x1000")
+        self.root.title("Ankara Sensör Ağı")
+        self.root.geometry("1200x800")
+        
+        # Ana scroll frame
+        self.main_canvas = tk.Canvas(root)
+        self.scrollbar = ttk.Scrollbar(root, orient="vertical", command=self.main_canvas.yview)
+        self.scrollable_frame = ttk.Frame(self.main_canvas)
+        
+        self.scrollable_frame.bind(
+            "<Configure>",
+            lambda e: self.main_canvas.configure(scrollregion=self.main_canvas.bbox("all"))
+        )
+        
+        self.main_canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
+        self.main_canvas.configure(yscrollcommand=self.scrollbar.set)
+        
+        # Pack scrollbar and canvas
+        self.scrollbar.pack(side="right", fill="y")
+        self.main_canvas.pack(side="left", fill="both", expand=True)
+        
+        # Ana frame'i scrollable frame'e taşı
+        self.main_frame = ttk.Frame(self.scrollable_frame)
+        self.main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        
+        # Fare tekerleği ile kaydırma
+        self.main_canvas.bind_all("<MouseWheel>", self._on_mousewheel)
         
         # API anahtarı
         self.api_key = "1d3ba4e02dda8d44b246972c395518f4"
@@ -106,13 +131,13 @@ class HavaDurumuArayuz:
         
         # Enerji seviyesi renk kodları
         self.enerji_renkleri = {
-            'tam_dolu': {'min': 90, 'max': 100, 'renk': 'darkgreen', 'aciklama': 'Tam Dolu'},
-            'cok_iyi': {'min': 75, 'max': 89, 'renk': 'lightgreen', 'aciklama': 'Çok İyi'},
+            'tam_dolu': {'min': 90, 'max': 100, 'renk': 'green', 'aciklama': 'Tam Dolu'},
+            'cok_iyi': {'min': 75, 'max': 89, 'renk': 'green4', 'aciklama': 'Çok İyi'},
             'iyi': {'min': 60, 'max': 74, 'renk': 'blue', 'aciklama': 'İyi'},
-            'orta': {'min': 45, 'max': 59, 'renk': 'yellow', 'aciklama': 'Orta'},
-            'dusuk': {'min': 30, 'max': 44, 'renk': 'orange', 'aciklama': 'Düşük'},
+            'orta': {'min': 45, 'max': 59, 'renk': 'orange', 'aciklama': 'Orta'},
+            'dusuk': {'min': 30, 'max': 44, 'renk': 'orange3', 'aciklama': 'Düşük'},
             'kritik': {'min': 15, 'max': 29, 'renk': 'red', 'aciklama': 'Kritik'},
-            'tukenme': {'min': 0, 'max': 14, 'renk': 'purple', 'aciklama': 'Tükenme'}
+            'tukenme': {'min': 0, 'max': 14, 'renk': 'red4', 'aciklama': 'Tükenme'}
         }
         
         self.arayuz_olustur()
@@ -120,7 +145,7 @@ class HavaDurumuArayuz:
     
     def arayuz_olustur(self):
         # Ana frame'i oluştur
-        self.main_frame = ttk.Frame(self.root)
+        self.main_frame = ttk.Frame(self.main_frame)
         self.main_frame.pack(expand=True, fill="both", padx=10, pady=10)
         
         # Sensör ayarları için frame
@@ -196,7 +221,7 @@ class HavaDurumuArayuz:
         self.basinc_label = ttk.Label(self.bilgi_frame, text="Ortalama Basınç: ")
         self.basinc_label.pack(pady=5)
         
-        self.ruzgar_label = ttk.Label(self.bilgi_frame, text="Ortalama Rüzgar Hızı: ")
+        self.ruzgar_label = ttk.Label(self.bilgi_frame, text="Ortalama pH: ")
         self.ruzgar_label.pack(pady=5)
         
         self.guncelleme_label = ttk.Label(self.bilgi_frame, text="Son Güncelleme: ")
@@ -222,39 +247,75 @@ class HavaDurumuArayuz:
         self.enerji_tuketim_label = ttk.Label(self.enerji_frame, text="Tahmini Enerji Tüketimi: ")
         self.enerji_tuketim_label.pack(pady=5)
         
-        # Bulanık mantık üyelik dereceleri
-        self.uyelik_frame = ttk.LabelFrame(self.enerji_frame, text="Üyelik Dereceleri")
-        self.uyelik_frame.pack(pady=5, fill="x")
-        
-        self.sicaklik_uyelik_label = ttk.Label(self.uyelik_frame, text="Sıcaklık Üyelik: ")
-        self.sicaklik_uyelik_label.pack(pady=2)
-        
-        self.nem_uyelik_label = ttk.Label(self.uyelik_frame, text="Nem Üyelik: ")
-        self.nem_uyelik_label.pack(pady=2)
-        
-        self.ruzgar_uyelik_label = ttk.Label(self.uyelik_frame, text="Rüzgar Üyelik: ")
-        self.ruzgar_uyelik_label.pack(pady=2)
-        
-        # Enerji seviyesi renk göstergesi
-        self.renk_frame = ttk.LabelFrame(self.main_frame, text="Enerji Seviyesi Renk Kodları")
-        self.renk_frame.pack(pady=10, fill="x")
-        
-        for enerji_durum in self.enerji_renkleri.values():
-            frame = ttk.Frame(self.renk_frame)
-            frame.pack(fill="x", padx=5, pady=2)
-            
-            renk_gosterge = tk.Label(
-                frame,
-                text="■",
-                fg=enerji_durum['renk'],
-                font=("Arial", 12, "bold")
-            )
-            renk_gosterge.pack(side="left", padx=5)
-            
-            ttk.Label(
-                frame,
-                text=f"%{enerji_durum['min']}-{enerji_durum['max']}: {enerji_durum['aciklama']}"
-            ).pack(side="left", padx=5)
+        # Renk kodları ve üyelik fonksiyonları frame'i
+        style = ttk.Style()
+        style.configure('Title.TLabel', font=('Arial', 10, 'bold'))
+        style.configure('Subtitle.TLabel', font=('Arial', 9))
+        style.configure('Separator.TFrame', background='gray')
+
+        # Ana container frame
+        info_container = ttk.Frame(self.main_frame)
+        info_container.pack(fill=tk.X, padx=10, pady=5)
+
+        # Sol panel - Renk kodları
+        left_panel = ttk.LabelFrame(info_container, text="Enerji Tüketimi Renk Kodları")
+        left_panel.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5)
+
+        ttk.Label(left_panel, text="Renk Kodları:", style='Title.TLabel').pack(anchor=tk.W, pady=(5,2))
+        ttk.Label(left_panel, text="■ Çok Yüksek (81-100%)", foreground="red").pack(anchor=tk.W, padx=5)
+        ttk.Label(left_panel, text="■ Yüksek (61-80%)", foreground="orange").pack(anchor=tk.W, padx=5)
+        ttk.Label(left_panel, text="■ Normal (41-60%)", foreground="blue").pack(anchor=tk.W, padx=5)
+        ttk.Label(left_panel, text="■ Düşük (21-40%)", foreground="green").pack(anchor=tk.W, padx=5)
+        ttk.Label(left_panel, text="■ Minimum (0-20%)", foreground="darkgreen").pack(anchor=tk.W, padx=5)
+
+        # Sağ panel - Üyelik fonksiyonları
+        right_panel = ttk.LabelFrame(info_container, text="Üyelik Fonksiyonları")
+        right_panel.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5)
+
+        # Pil seviyesi
+        ttk.Label(right_panel, text="Pil Seviyesi:", style='Title.TLabel').pack(anchor=tk.W, pady=(5,2))
+        ttk.Label(right_panel, text="• Çok Kötü: 0-20%", style='Subtitle.TLabel').pack(anchor=tk.W, padx=5)
+        ttk.Label(right_panel, text="• Kötü: 21-40%", style='Subtitle.TLabel').pack(anchor=tk.W, padx=5)
+        ttk.Label(right_panel, text="• Orta: 41-60%", style='Subtitle.TLabel').pack(anchor=tk.W, padx=5)
+        ttk.Label(right_panel, text="• İyi: 61-80%", style='Subtitle.TLabel').pack(anchor=tk.W, padx=5)
+        ttk.Label(right_panel, text="• Çok İyi: 81-100%", style='Subtitle.TLabel').pack(anchor=tk.W, padx=5)
+
+        separator1 = ttk.Frame(right_panel, height=1, style='Separator.TFrame')
+        separator1.pack(fill=tk.X, padx=5, pady=5)
+
+        # Nem seviyesi
+        ttk.Label(right_panel, text="Nem Seviyesi:", style='Title.TLabel').pack(anchor=tk.W, pady=(5,2))
+        ttk.Label(right_panel, text="• Kuru Toprak: 0-300 g/m³", style='Subtitle.TLabel').pack(anchor=tk.W, padx=5)
+        ttk.Label(right_panel, text="• Nemli Toprak: 300-700 g/m³", style='Subtitle.TLabel').pack(anchor=tk.W, padx=5)
+        ttk.Label(right_panel, text="• Suda: 700-950 g/m³", style='Subtitle.TLabel').pack(anchor=tk.W, padx=5)
+
+        separator2 = ttk.Frame(right_panel, height=1, style='Separator.TFrame')
+        separator2.pack(fill=tk.X, padx=5, pady=5)
+
+        # pH seviyesi
+        ttk.Label(right_panel, text="pH Seviyesi:", style='Title.TLabel').pack(anchor=tk.W, pady=(5,2))
+        ttk.Label(right_panel, text="• Asidik: 0-6.9", style='Subtitle.TLabel').pack(anchor=tk.W, padx=5)
+        ttk.Label(right_panel, text="• Nötr: 7.0", style='Subtitle.TLabel').pack(anchor=tk.W, padx=5)
+        ttk.Label(right_panel, text="• Bazik: 7.1-14", style='Subtitle.TLabel').pack(anchor=tk.W, padx=5)
+
+        separator3 = ttk.Frame(right_panel, height=1, style='Separator.TFrame')
+        separator3.pack(fill=tk.X, padx=5, pady=5)
+
+        # Basınç seviyesi
+        ttk.Label(right_panel, text="Basınç Seviyesi:", style='Title.TLabel').pack(anchor=tk.W, pady=(5,2))
+        ttk.Label(right_panel, text="• Düşük: -1.0 ile -0.4 bar", style='Subtitle.TLabel').pack(anchor=tk.W, padx=5)
+        ttk.Label(right_panel, text="• Normal: -0.4 ile 0.4 bar", style='Subtitle.TLabel').pack(anchor=tk.W, padx=5)
+        ttk.Label(right_panel, text="• Yüksek: 0.4 ile 1.0 bar", style='Subtitle.TLabel').pack(anchor=tk.W, padx=5)
+
+        # Enerji tüketimi açıklaması
+        consumption_frame = ttk.LabelFrame(self.main_frame, text="Enerji Tüketimi Seviyeleri")
+        consumption_frame.pack(fill=tk.X, padx=10, pady=5)
+
+        ttk.Label(consumption_frame, text="Minimum (0-20%): En düşük enerji tüketimi, optimal çalışma koşulları", style='Subtitle.TLabel').pack(anchor=tk.W, padx=5, pady=2)
+        ttk.Label(consumption_frame, text="Düşük (21-40%): Verimli çalışma, normal koşullar altında enerji tasarrufu", style='Subtitle.TLabel').pack(anchor=tk.W, padx=5, pady=2)
+        ttk.Label(consumption_frame, text="Normal (41-60%): Standart çalışma koşulları, ortalama enerji tüketimi", style='Subtitle.TLabel').pack(anchor=tk.W, padx=5, pady=2)
+        ttk.Label(consumption_frame, text="Yüksek (61-80%): Zorlu koşullar altında artan enerji tüketimi", style='Subtitle.TLabel').pack(anchor=tk.W, padx=5, pady=2)
+        ttk.Label(consumption_frame, text="Çok Yüksek (81-100%): Kritik durum, maksimum enerji tüketimi", style='Subtitle.TLabel').pack(anchor=tk.W, padx=5, pady=2)
     
     def sensorleri_yerlestir(self):
         try:
@@ -268,8 +329,9 @@ class HavaDurumuArayuz:
             if alan_boyutu <= 0:
                 raise ValueError("Alan boyutu pozitif olmalıdır!")
             
-            # Sensör noktalarını temizle
+            # Sensör noktalarını ve verilerini temizle
             self.sensor_noktalari.clear()
+            self.tum_veriler = {}
             
             # Her bölge için sensör sayısını hesapla
             bolge_basina = sensor_sayisi // len(self.ankara_bolgeler)
@@ -300,11 +362,21 @@ class HavaDurumuArayuz:
                     )
                     
                     if self.nokta_karada_mi(lat, lon):
-                        self.sensor_noktalari[f'Sensör {yerlestirilmis + 1}'] = {
+                        sensor_isim = f'Sensör {yerlestirilmis + 1}'
+                        self.sensor_noktalari[sensor_isim] = {
                             'lat': lat,
                             'lon': lon,
                             'bolge': bolge['isim']
                         }
+                        
+                        # Varsayılan hava durumu verilerini ata
+                        self.tum_veriler[sensor_isim] = {
+                            'sicaklik': 20.0,  # Varsayılan sıcaklık (°C)
+                            'nem': 500.0,      # Varsayılan nem (g/m³)
+                            'basinc': 0.0,     # Varsayılan basınç (bar)
+                            'ph': 7.0          # Varsayılan pH
+                        }
+                        
                         yerlestirilmis += 1
                         bolgedeki_sensor += 1
             
@@ -347,6 +419,17 @@ class HavaDurumuArayuz:
         # Ankara'nın merkezi
         merkez_lat = 39.90
         merkez_lon = 32.80
+        
+        # Hava durumu verilerini sakla
+        if not hasattr(self, 'tum_veriler'):
+            self.tum_veriler = {}
+            for isim, konum in self.sensor_noktalari.items():
+                self.tum_veriler[isim] = {
+                    'sicaklik': 20.0,  # Varsayılan değerler
+                    'nem': 500.0,
+                    'basinc': 0.0,
+                    'ph': 7.0
+                }
         
         m = folium.Map(
             location=[merkez_lat, merkez_lon],
@@ -421,16 +504,69 @@ class HavaDurumuArayuz:
             sensor_id = int(isim.split()[1]) - 1
             enerji_seviyesi = self.kaa_simulasyon.sensor_durumlari[sensor_id]['enerji_seviyesi']
             
-            # Enerji seviyesine göre renk belirle
-            marker_renk = 'gray'  # Varsayılan renk
-            for enerji_durum in self.enerji_renkleri.values():
-                if enerji_durum['min'] <= enerji_seviyesi <= enerji_durum['max']:
-                    marker_renk = enerji_durum['renk']
-                    break
+            # Enerji tüketimini hesapla
+            enerji_tuketimi = self.kaa_simulasyon.bulanik_mantik_kurallari(
+                enerji_seviyesi,
+                self.tum_veriler[isim]['nem'],
+                self.tum_veriler[isim]['basinc'],
+                self.tum_veriler[isim]['ph']
+            )
+            
+            # Enerji tüketimine göre renk belirle
+            if enerji_tuketimi >= 90:
+                marker_renk = 'darkred'  # Çok yüksek tüketim
+            elif enerji_tuketimi >= 70:
+                marker_renk = 'red'      # Yüksek tüketim
+            elif enerji_tuketimi >= 45:
+                marker_renk = 'orange'   # Normal tüketim
+            elif enerji_tuketimi >= 20:
+                marker_renk = 'blue'     # Düşük tüketim
+            else:
+                marker_renk = 'green'    # Minimum tüketim
+            
+            # Pil seviyesine göre durum belirleme
+            if enerji_seviyesi >= 90:
+                pil_durumu = "Tam Dolu"
+                pil_renk = "green"
+            elif enerji_seviyesi >= 75:
+                pil_durumu = "Çok İyi"
+                pil_renk = "green"
+            elif enerji_seviyesi >= 60:
+                pil_durumu = "İyi"
+                pil_renk = "blue"
+            elif enerji_seviyesi >= 45:
+                pil_durumu = "Orta"
+                pil_renk = "orange"
+            elif enerji_seviyesi >= 30:
+                pil_durumu = "Düşük"
+                pil_renk = "red"
+            elif enerji_seviyesi >= 15:
+                pil_durumu = "Kritik"
+                pil_renk = "red"
+            else:
+                pil_durumu = "Tükenme"
+                pil_renk = "darkred"
             
             # Popup içeriğini hazırla
-            popup_content = f"{isim} ({konum['bolge']})<br>Enerji: %{enerji_seviyesi:.1f}"
+            popup_content = f"""
+            <div style="font-family: Arial, sans-serif; text-align: center; background-color: rgba(255,255,255,0.9); 
+                        padding: 10px; border-radius: 5px; border: 1px solid {pil_renk};">
+                <h4>{isim} ({konum['bolge']})</h4>
+                <p><b>Pil Seviyesi:</b> <span style="color: {pil_renk}">%{enerji_seviyesi:.1f}</span> ({pil_durumu})</p>
+                <p><b>Enerji Tüketimi:</b> <span style="color: {marker_renk}">%{enerji_tuketimi:.1f}</span></p>
+                <p><b>Durum:</b> {'Aktif' if self.kaa_simulasyon.sensor_durumlari[sensor_id]['aktif'] else 'Pasif'}</p>
+                <p><b>Hava Durumu Verileri:</b></p>
+                <p>Sıcaklık: {self.tum_veriler[isim]['sicaklik']:.1f}°C</p>
+                <p>Nem: {self.tum_veriler[isim]['nem']:.1f} g/m³</p>
+                <p>Basınç: {self.tum_veriler[isim]['basinc']:.2f} bar</p>
+                <p>pH: {self.tum_veriler[isim]['ph']:.2f}</p>
+                <p><b>Konum:</b><br>
+                Enlem: {konum['lat']:.6f}<br>
+                Boylam: {konum['lon']:.6f}</p>
+            </div>
+            """
             
+            # Sensör işaretçisini ekle
             folium.Marker(
                 [konum['lat'], konum['lon']],
                 popup=popup_content,
@@ -440,21 +576,43 @@ class HavaDurumuArayuz:
         # Lejant ekle
         legend_html = """
         <div style="position: fixed; bottom: 50px; right: 50px; z-index: 1000; background-color: white;
-                    padding: 10px; border: 2px solid grey; border-radius: 5px">
-        <h4>Harita Göstergeleri</h4>
-        <p><i class="fa fa-square" style="color:green"></i> Kara Bölgeleri</p>
-        <p><i class="fa fa-square" style="color:blue"></i> Su Alanları</p>
-        <p><i class="fa fa-square" style="color:red"></i> Seçili Alan Sınırları</p>
-        <h4>Enerji Seviyeleri</h4>
+                     padding: 10px; border: 2px solid grey; border-radius: 5px">
+        <h4 style='margin-top:0'><b>Harita Göstergeleri</b></h4>
+        <div style='margin-bottom:10px'>
+            <span style='background-color:green;padding:0 10px'>&nbsp;</span>
+            <span style='margin-left:5px'>Kara Bölgeleri</span>
+        </div>
+        <div style='margin-bottom:10px'>
+            <span style='background-color:blue;padding:0 10px'>&nbsp;</span>
+            <span style='margin-left:5px'>Su Alanları</span>
+        </div>
+        <div style='margin-bottom:10px'>
+            <span style='background-color:red;padding:0 10px'>&nbsp;</span>
+            <span style='margin-left:5px'>Seçili Alan</span>
+        </div>
+        <h4><b>Enerji Tüketimi</b></h4>
+        <div style='margin-bottom:5px'>
+            <i class='fa fa-map-marker' style='color:darkred'></i>
+            <span style='margin-left:5px'>90-100%: Çok Yüksek</span>
+        </div>
+        <div style='margin-bottom:5px'>
+            <i class='fa fa-map-marker' style='color:red'></i>
+            <span style='margin-left:5px'>70-89%: Yüksek</span>
+        </div>
+        <div style='margin-bottom:5px'>
+            <i class='fa fa-map-marker' style='color:orange'></i>
+            <span style='margin-left:5px'>45-69%: Normal</span>
+        </div>
+        <div style='margin-bottom:5px'>
+            <i class='fa fa-map-marker' style='color:blue'></i>
+            <span style='margin-left:5px'>20-44%: Düşük</span>
+        </div>
+        <div style='margin-bottom:5px'>
+            <i class='fa fa-map-marker' style='color:green'></i>
+            <span style='margin-left:5px'>0-19%: Minimum</span>
+        </div>
+        </div>
         """
-        
-        for enerji_durum in self.enerji_renkleri.values():
-            legend_html += f"""
-            <p><i class="fa fa-circle" style="color:{enerji_durum['renk']}"></i>
-            {enerji_durum['min']}-{enerji_durum['max']}%: {enerji_durum['aciklama']}</p>
-            """
-        
-        legend_html += "</div>"
         m.get_root().html.add_child(folium.Element(legend_html))
         
         # Haritayı HTML dosyası olarak kaydet
@@ -463,61 +621,100 @@ class HavaDurumuArayuz:
     
     def harita_goster(self):
         """Haritayı ayrı bir pencerede gösterir"""
-        # Haritayı güncelle
-        self.harita_olustur()
-        # Yeni bir pencerede haritayı göster
-        webview.create_window("Ankara Haritası", url=self.harita_dosyasi, width=800, height=600)
-        webview.start()
+        try:
+            # Haritayı güncelle
+            self.harita_olustur()
+            
+            # Haritayı webview ile göster
+            if hasattr(self, 'window'):
+                try:
+                    self.window.destroy()
+                except:
+                    pass
+            
+            self.window = webview.create_window(
+                'Ankara Sensör Ağı Haritası',
+                html=open(self.harita_dosyasi, 'r', encoding='utf-8').read(),
+                width=1024,
+                height=768,
+                resizable=True
+            )
+            webview.start()
+            
+        except Exception as e:
+            print(f"Harita gösterme hatası: {e}")
+            messagebox.showerror("Hata", f"Harita gösterilirken bir hata oluştu: {str(e)}")
     
     def hava_durumu_guncelle(self):
         try:
+            # Sensör noktaları kontrolü
+            if not self.sensor_noktalari:
+                messagebox.showerror("Hata", "Önce sensörleri yerleştirmelisiniz!")
+                return
+                
             tum_veriler = {}
             toplam_sicaklik = 0
             toplam_nem = 0
-            toplam_ruzgar = 0
             toplam_basinc = 0
+            toplam_ph = 0
+            aktif_sensor_sayisi = 0
             
-            # Her sensör noktası için hava durumu verilerini çek
+            # Her sensör noktası için sıcaklık verilerini çek
             for isim, konum in self.sensor_noktalari.items():
-                url = f"http://api.openweathermap.org/data/2.5/weather?lat={konum['lat']}&lon={konum['lon']}&appid={self.api_key}&units=metric"
-                response = requests.get(url)
-                data = response.json()
-                
-                if response.status_code == 200:
-                    sicaklik = data['main']['temp']
-                    nem = data['main']['humidity']
-                    basinc = data['main']['pressure']
-                    ruzgar = data['wind']['speed']
+                try:
+                    url = f"http://api.openweathermap.org/data/2.5/weather?lat={konum['lat']}&lon={konum['lon']}&appid={self.api_key}&units=metric"
+                    response = requests.get(url)
+                    data = response.json()
                     
-                    tum_veriler[isim] = {
-                        'sicaklik': sicaklik,
-                        'nem': nem,
-                        'basinc': basinc,
-                        'ruzgar': ruzgar
-                    }
-                    
-                    toplam_sicaklik += sicaklik
-                    toplam_nem += nem
-                    toplam_basinc += basinc
-                    toplam_ruzgar += ruzgar
+                    if response.status_code == 200:
+                        sicaklik = data['main']['temp']
+                        
+                        # Rastgele değerler üret
+                        nem = random.uniform(0, 950)  # 0-950 arası
+                        basinc = random.uniform(-1, 1)  # -1 ile 1 bar arası
+                        ph = random.uniform(0, 14)  # 0-14 pH arası
+                        
+                        tum_veriler[isim] = {
+                            'sicaklik': sicaklik,
+                            'nem': nem,
+                            'basinc': basinc,
+                            'ph': ph
+                        }
+                        
+                        toplam_sicaklik += sicaklik
+                        toplam_nem += nem
+                        toplam_basinc += basinc
+                        toplam_ph += ph
+                        aktif_sensor_sayisi += 1
+                        
+                except Exception as e:
+                    print(f"Sensör {isim} için veri çekme hatası: {e}")
+                    continue
+            
+            if aktif_sensor_sayisi == 0:
+                messagebox.showerror("Hata", "Hiç aktif sensör bulunamadı!")
+                return
+            
+            # Verileri sakla
+            self.tum_veriler = tum_veriler
             
             # Ortalama değerleri hesapla
-            sensor_sayisi = len(self.sensor_noktalari)
-            ort_sicaklik = toplam_sicaklik / sensor_sayisi
-            ort_nem = toplam_nem / sensor_sayisi
-            ort_basinc = toplam_basinc / sensor_sayisi
-            ort_ruzgar = toplam_ruzgar / sensor_sayisi
+            ort_sicaklik = toplam_sicaklik / aktif_sensor_sayisi
+            ort_nem = toplam_nem / aktif_sensor_sayisi
+            ort_basinc = toplam_basinc / aktif_sensor_sayisi
+            ort_ph = toplam_ph / aktif_sensor_sayisi
             
             # Son değerleri sakla
             self.son_sicaklik = ort_sicaklik
             self.son_nem = ort_nem
-            self.son_ruzgar = ort_ruzgar
+            self.son_basinc = ort_basinc
+            self.son_ph = ort_ph
             
             # Arayüzü güncelle
             self.sicaklik_label.config(text=f"Ortalama Sıcaklık: {ort_sicaklik:.1f}°C")
-            self.nem_label.config(text=f"Ortalama Nem: {ort_nem:.1f}%")
-            self.basinc_label.config(text=f"Ortalama Basınç: {ort_basinc:.1f} hPa")
-            self.ruzgar_label.config(text=f"Ortalama Rüzgar Hızı: {ort_ruzgar:.1f} m/s")
+            self.nem_label.config(text=f"Ortalama Nem: {ort_nem:.1f} g/m³")
+            self.basinc_label.config(text=f"Ortalama Basınç: {ort_basinc:.2f} bar")
+            self.ruzgar_label.config(text=f"Ortalama pH: {ort_ph:.2f}")
             
             guncel_zaman = datetime.now().strftime("%d.%m.%Y %H:%M:%S")
             self.guncelleme_label.config(text=f"Son Güncelleme: {guncel_zaman}")
@@ -527,9 +724,9 @@ class HavaDurumuArayuz:
             
             # Bulanık mantık sistemini çalıştır
             hava_durumu_verileri = {
-                'sicaklik': ort_sicaklik,
                 'nem': ort_nem,
-                'ruzgar': ort_ruzgar
+                'basinc': ort_basinc,
+                'ph': ort_ph
             }
             
             # Sensörlerin enerji tüketimini hesapla
@@ -547,27 +744,23 @@ class HavaDurumuArayuz:
                 self.ortalama_enerji_label.config(text=f"Ortalama Enerji Seviyesi: {sonuc['ortalama_enerji']:.2f}%")
                 self.koordinator_label.config(text=f"Koordinatör Sensör: {list(self.sensor_noktalari.keys())[sonuc['koordinator']]}")
             
-            # Enerji tüketim tahminini hesapla ve göster
-            self.son_enerji_tuketimi = self.kaa_simulasyon.bulanik_mantik_kurallari(ort_sicaklik, ort_nem, ort_ruzgar)
-            self.enerji_tuketim_label.config(text=f"Tahmini Enerji Tüketimi: {self.son_enerji_tuketimi:.2f}%")
+            # Ortalama enerji tüketimini hesapla
+            aktif_sensorler = [node for node in self.kaa_simulasyon.ag.nodes() if self.kaa_simulasyon.sensor_durumlari[node]['aktif']]
+            if aktif_sensorler:
+                self.son_enerji_tuketimi = sum(self.kaa_simulasyon.sensor_durumlari[node]['enerji_seviyesi'] for node in aktif_sensorler) / len(aktif_sensorler)
+            else:
+                self.son_enerji_tuketimi = 0
             
-            # Üyelik derecelerini hesapla ve göster
-            sicaklik_derece = self.kaa_simulasyon.hesapla_sicaklik_uyelik(ort_sicaklik)
-            nem_derece = self.kaa_simulasyon.hesapla_nem_uyelik(ort_nem)
-            ruzgar_derece = self.kaa_simulasyon.hesapla_ruzgar_uyelik(ort_ruzgar)
+            self.enerji_tuketim_label.config(text=f"Ortalama Enerji Seviyesi: {self.son_enerji_tuketimi:.2f}%")
             
-            self.sicaklik_uyelik_label.config(
-                text=f"Sıcaklık Üyelik => Düşük: {sicaklik_derece['dusuk']:.2f}, Orta: {sicaklik_derece['orta']:.2f}, Yüksek: {sicaklik_derece['yuksek']:.2f}"
-            )
-            self.nem_uyelik_label.config(
-                text=f"Nem Üyelik => Düşük: {nem_derece['dusuk']:.2f}, Orta: {nem_derece['orta']:.2f}, Yüksek: {nem_derece['yuksek']:.2f}"
-            )
-            self.ruzgar_uyelik_label.config(
-                text=f"Rüzgar Üyelik => Yavaş: {ruzgar_derece['yavas']:.2f}, Orta: {ruzgar_derece['orta']:.2f}, Hızlı: {ruzgar_derece['hizli']:.2f}"
-            )
+            # Haritayı güncelle
+            self.harita_olustur()
+            
+            messagebox.showinfo("Başarılı", "Hava durumu verileri başarıyla güncellendi!")
             
         except Exception as e:
             print(f"Hata oluştu: {e}")
+            messagebox.showerror("Hata", f"Veri güncellenirken bir hata oluştu: {str(e)}")
     
     def sensor_detaylarini_goster(self, veriler):
         """Her sensör için detaylı bilgileri gösterir"""
@@ -648,13 +841,13 @@ class HavaDurumuArayuz:
             ttk.Label(grid_frame, text=f"{veri['sicaklik']:.1f}°C").grid(row=1, column=1, padx=5, pady=2, sticky="w")
             
             ttk.Label(grid_frame, text="Nem").grid(row=2, column=0, padx=5, pady=2, sticky="w")
-            ttk.Label(grid_frame, text=f"{veri['nem']:.1f}%").grid(row=2, column=1, padx=5, pady=2, sticky="w")
+            ttk.Label(grid_frame, text=f"{veri['nem']:.1f} g/m³").grid(row=2, column=1, padx=5, pady=2, sticky="w")
             
             ttk.Label(grid_frame, text="Basınç").grid(row=3, column=0, padx=5, pady=2, sticky="w")
-            ttk.Label(grid_frame, text=f"{veri['basinc']} hPa").grid(row=3, column=1, padx=5, pady=2, sticky="w")
+            ttk.Label(grid_frame, text=f"{veri['basinc']:.2f} bar").grid(row=3, column=1, padx=5, pady=2, sticky="w")
             
-            ttk.Label(grid_frame, text="Rüzgar Hızı").grid(row=4, column=0, padx=5, pady=2, sticky="w")
-            ttk.Label(grid_frame, text=f"{veri['ruzgar']:.1f} m/s").grid(row=4, column=1, padx=5, pady=2, sticky="w")
+            ttk.Label(grid_frame, text="pH").grid(row=4, column=0, padx=5, pady=2, sticky="w")
+            ttk.Label(grid_frame, text=f"{veri['ph']:.2f}").grid(row=4, column=1, padx=5, pady=2, sticky="w")
         
         # Scrollbar ve canvas'ı yerleştir
         scrollbar.pack(side="right", fill="y")
@@ -712,41 +905,50 @@ class HavaDurumuArayuz:
         giris_frame = ttk.LabelFrame(scrollable_frame, text="Giriş Değişkenleri")
         giris_frame.pack(pady=10, padx=5, fill="x")
         
-        ttk.Label(giris_frame, text="Sıcaklık (0-40°C):").pack(pady=5)
-        ttk.Label(giris_frame, text="• Düşük: 0-20°C").pack()
-        ttk.Label(giris_frame, text="• Orta: 15-35°C").pack()
-        ttk.Label(giris_frame, text="• Yüksek: 30-40°C").pack()
+        ttk.Label(giris_frame, text="Pil Seviyesi (0-100%):").pack(pady=5)
+        ttk.Label(giris_frame, text="• Kritik: 0-30%").pack()
+        ttk.Label(giris_frame, text="• Normal: 20-80%").pack()
+        ttk.Label(giris_frame, text="• Yüksek: 70-100%").pack()
         
-        ttk.Label(giris_frame, text="\nNem (%0-100):").pack(pady=5)
-        ttk.Label(giris_frame, text="• Düşük: 0-40%").pack()
-        ttk.Label(giris_frame, text="• Orta: 30-70%").pack()
-        ttk.Label(giris_frame, text="• Yüksek: 60-100%").pack()
+        ttk.Label(giris_frame, text="\nNem (0-950 g/m³):").pack(pady=5)
+        ttk.Label(giris_frame, text="• Düşük: 0-300 g/m³").pack()
+        ttk.Label(giris_frame, text="• Orta: 250-650 g/m³").pack()
+        ttk.Label(giris_frame, text="• Yüksek: 600-950 g/m³").pack()
         
-        ttk.Label(giris_frame, text="\nRüzgar Hızı (0-20 m/s):").pack(pady=5)
-        ttk.Label(giris_frame, text="• Yavaş: 0-8 m/s").pack()
-        ttk.Label(giris_frame, text="• Orta: 6-14 m/s").pack()
-        ttk.Label(giris_frame, text="• Hızlı: 12-20 m/s").pack()
+        ttk.Label(giris_frame, text="\nBasınç (-1 ile 1 bar):").pack(pady=5)
+        ttk.Label(giris_frame, text="• Düşük: -1 ile -0.5 bar").pack()
+        ttk.Label(giris_frame, text="• Normal: -0.4 ile 0.4 bar").pack()
+        ttk.Label(giris_frame, text="• Yüksek: 0.5 ile 1 bar").pack()
+        
+        ttk.Label(giris_frame, text="\nToprak pH (0-14):").pack(pady=5)
+        ttk.Label(giris_frame, text="• Asit: 0-6").pack()
+        ttk.Label(giris_frame, text="• Nötr: 6-8").pack()
+        ttk.Label(giris_frame, text="• Bazik: 8-14").pack()
         
         # Çıkış değişkeni
         cikis_frame = ttk.LabelFrame(scrollable_frame, text="Çıkış Değişkeni")
         cikis_frame.pack(pady=10, padx=5, fill="x")
         
         ttk.Label(cikis_frame, text="Enerji Tüketimi (%0-100):").pack(pady=5)
-        ttk.Label(cikis_frame, text="• Çok Düşük: 0-25%").pack()
-        ttk.Label(cikis_frame, text="• Düşük: 20-50%").pack()
-        ttk.Label(cikis_frame, text="• Orta: 45-75%").pack()
-        ttk.Label(cikis_frame, text="• Yüksek: 70-100%").pack()
+        ttk.Label(cikis_frame, text="• Minimum: 0-10%").pack()
+        ttk.Label(cikis_frame, text="• Düşük: 20-25%").pack()
+        ttk.Label(cikis_frame, text="• Normal: 45-50%").pack()
+        ttk.Label(cikis_frame, text="• Yüksek: 70-80%").pack()
+        ttk.Label(cikis_frame, text="• Çok Yüksek: 90%").pack()
         
         # Bulanık kurallar
         kural_frame = ttk.LabelFrame(scrollable_frame, text="Bulanık Mantık Kuralları")
         kural_frame.pack(pady=10, padx=5, fill="x")
         
         kurallar = [
-            "1. EĞER sıcaklık düşük VE nem düşük VE rüzgar yavaş İSE, enerji tüketimi çok düşük",
-            "2. EĞER sıcaklık yüksek VEYA nem yüksek İSE, enerji tüketimi yüksek",
-            "3. EĞER sıcaklık orta VE nem orta VE rüzgar orta İSE, enerji tüketimi orta",
-            "4. EĞER sıcaklık düşük VE rüzgar hızlı İSE, enerji tüketimi düşük",
-            "5. EĞER nem yüksek VE rüzgar yavaş İSE, enerji tüketimi yüksek"
+            "1. EĞER pil kritik seviyede ise, enerji tüketimi çok yüksek (90%)",
+            "2. EĞER pil normal VE pH nötr VE basınç normal VE nem normal İSE, enerji tüketimi orta (50%)",
+            "3. EĞER pil yüksek VE pH nötr VE basınç normal VE nem normal İSE, enerji tüketimi düşük (20%)",
+            "4. EĞER pH asidik VEYA bazik İSE, enerji tüketimi yüksek (70%)",
+            "5. EĞER basınç çok düşük VEYA çok yüksek İSE, enerji tüketimi yüksek (75%)",
+            "6. EĞER nem çok yüksek İSE, enerji tüketimi yüksek (80%)",
+            "7. EĞER nem normal VE pH nötr İSE, enerji tüketimi normal (45%)",
+            "8. EĞER tüm değerler optimal İSE, enerji tüketimi minimum (10%)"
         ]
         
         for kural in kurallar:
@@ -758,8 +960,9 @@ class HavaDurumuArayuz:
         
         if hasattr(self, 'son_sicaklik'):
             ttk.Label(durum_frame, text=f"Sıcaklık: {self.son_sicaklik:.1f}°C").pack(pady=2)
-            ttk.Label(durum_frame, text=f"Nem: {self.son_nem:.1f}%").pack(pady=2)
-            ttk.Label(durum_frame, text=f"Rüzgar: {self.son_ruzgar:.1f} m/s").pack(pady=2)
+            ttk.Label(durum_frame, text=f"Nem: {self.son_nem:.1f} g/m³").pack(pady=2)
+            ttk.Label(durum_frame, text=f"Basınç: {self.son_basinc:.2f} bar").pack(pady=2)
+            ttk.Label(durum_frame, text=f"pH: {self.son_ph:.2f}").pack(pady=2)
             ttk.Label(durum_frame, text=f"Hesaplanan Enerji Tüketimi: {self.son_enerji_tuketimi:.1f}%").pack(pady=2)
         else:
             ttk.Label(durum_frame, text="Henüz veri güncellenmedi").pack(pady=2)
@@ -800,6 +1003,9 @@ class HavaDurumuArayuz:
                     "FIS dosyası yüklenirken bir hata oluştu!"
                 )
 
+    def _on_mousewheel(self, event):
+        self.main_canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+
 class KAASimulasyon:
     def __init__(self):
         self.ag = None
@@ -815,7 +1021,7 @@ class KAASimulasyon:
         # Sensörlerin başlangıç durumlarını ayarla
         for node in self.ag.nodes():
             self.sensor_durumlari[node] = {
-                'enerji_seviyesi': 100,  # Başlangıçta %100 enerji
+                'enerji_seviyesi': random.uniform(0, 100),  # Rastgele pil seviyesi (0-100 arası)
                 'aktif': True
             }
     
@@ -826,35 +1032,163 @@ class KAASimulasyon:
             return True
         return False
     
-    def bulanik_mantik_kurallari(self, sicaklik, nem, ruzgar):
-        """MATLAB'dan yüklenen bulanık mantık kurallarını uygular"""
-        if self.fis_dosyasi is None:
-            # Eğer .fis dosyası yüklenmemişse varsayılan değer döndür
-            return 50
-        
+    def bulanik_mantik_kurallari(self, pil_seviyesi, nem, basinc, ph):
+        """Bulanık mantık kurallarını uygular ve enerji tüketimini hesaplar"""
         try:
-            # Burada .fis dosyasından kuralları okuma ve uygulama işlemi yapılacak
-            # MATLAB'dan alınan kurallar uygulanacak
-            # Şimdilik varsayılan değer döndürüyoruz
-            return 50
+            # Giriş değerlerini sayısal değerlere dönüştür
+            pil_seviyesi_deger = float(pil_seviyesi)
+            nem_deger = float(nem)
+            basinc_deger = float(basinc)
+            ph_deger = float(ph)
+            
+            # Pil seviyesi için bulanık kümeler
+            pil_seviyesi_var = ctrl.Antecedent(np.arange(0, 101, 1), 'pil_seviyesi')
+            pil_seviyesi_var['cok_kotu'] = fuzz.trapmf(pil_seviyesi_var.universe, [0, 0, 20, 20])
+            pil_seviyesi_var['kotu'] = fuzz.trapmf(pil_seviyesi_var.universe, [20, 21, 40, 40])
+            pil_seviyesi_var['orta'] = fuzz.trapmf(pil_seviyesi_var.universe, [40, 41, 60, 60])
+            pil_seviyesi_var['iyi'] = fuzz.trapmf(pil_seviyesi_var.universe, [60, 61, 80, 80])
+            pil_seviyesi_var['cok_iyi'] = fuzz.trapmf(pil_seviyesi_var.universe, [80, 81, 100, 100])
+
+            # Nem için bulanık kümeler
+            nem_var = ctrl.Antecedent(np.arange(0, 951, 1), 'nem')
+            nem_var['kuru_toprak'] = fuzz.trapmf(nem_var.universe, [0, 0, 250, 300])
+            nem_var['nemli_toprak'] = fuzz.trimf(nem_var.universe, [300, 500, 700])
+            nem_var['suda'] = fuzz.trapmf(nem_var.universe, [700, 800, 950, 950])
+
+            # Basınç için bulanık kümeler
+            basinc_var = ctrl.Antecedent(np.arange(-1, 1.1, 0.1), 'basinc')
+            basinc_var['dusuk'] = fuzz.trapmf(basinc_var.universe, [-1, -1, -0.5, -0.4])
+            basinc_var['normal'] = fuzz.trimf(basinc_var.universe, [-0.4, 0, 0.4])
+            basinc_var['yuksek'] = fuzz.trapmf(basinc_var.universe, [0.4, 0.5, 1, 1])
+
+            # pH için bulanık kümeler
+            ph_var = ctrl.Antecedent(np.arange(0, 14.1, 0.1), 'ph')
+            ph_var['asidik'] = fuzz.trapmf(ph_var.universe, [0, 0, 6.8, 6.9])
+            ph_var['notr'] = fuzz.trimf(ph_var.universe, [6.9, 7, 7.1])
+            ph_var['bazik'] = fuzz.trapmf(ph_var.universe, [7.1, 7.2, 14, 14])
+
+            # Enerji tüketimi için bulanık kümeler
+            enerji_tuketimi = ctrl.Consequent(np.arange(0, 101, 1), 'enerji_tuketimi')
+            enerji_tuketimi['minimum'] = fuzz.trapmf(enerji_tuketimi.universe, [0, 0, 20, 20])
+            enerji_tuketimi['dusuk'] = fuzz.trapmf(enerji_tuketimi.universe, [20, 21, 40, 40])
+            enerji_tuketimi['normal'] = fuzz.trapmf(enerji_tuketimi.universe, [40, 41, 60, 60])
+            enerji_tuketimi['yuksek'] = fuzz.trapmf(enerji_tuketimi.universe, [60, 61, 80, 80])
+            enerji_tuketimi['cok_yuksek'] = fuzz.trapmf(enerji_tuketimi.universe, [80, 81, 100, 100])
+
+            # Bulanık kurallar
+            # Pil seviyesi kuralları
+            kural1 = ctrl.Rule(pil_seviyesi_var['cok_kotu'], enerji_tuketimi['cok_yuksek'])
+            kural2 = ctrl.Rule(pil_seviyesi_var['kotu'], enerji_tuketimi['yuksek'])
+            kural3 = ctrl.Rule(pil_seviyesi_var['orta'], enerji_tuketimi['normal'])
+            kural4 = ctrl.Rule(pil_seviyesi_var['iyi'], enerji_tuketimi['dusuk'])
+            kural5 = ctrl.Rule(pil_seviyesi_var['cok_iyi'], enerji_tuketimi['minimum'])
+            
+            # Nem kuralları
+            kural6 = ctrl.Rule(nem_var['kuru_toprak'], enerji_tuketimi['normal'])
+            kural7 = ctrl.Rule(nem_var['nemli_toprak'], enerji_tuketimi['dusuk'])
+            kural8 = ctrl.Rule(nem_var['suda'], enerji_tuketimi['yuksek'])
+            
+            # pH kuralları
+            kural9 = ctrl.Rule(ph_var['asidik'], enerji_tuketimi['yuksek'])
+            kural10 = ctrl.Rule(ph_var['notr'], enerji_tuketimi['dusuk'])
+            kural11 = ctrl.Rule(ph_var['bazik'], enerji_tuketimi['yuksek'])
+            
+            # Basınç kuralları
+            kural12 = ctrl.Rule(basinc_var['dusuk'], enerji_tuketimi['yuksek'])
+            kural13 = ctrl.Rule(basinc_var['normal'], enerji_tuketimi['dusuk'])
+            kural14 = ctrl.Rule(basinc_var['yuksek'], enerji_tuketimi['yuksek'])
+            
+            # Kombinasyon kuralları
+            # İdeal durum: Tüm koşullar optimal
+            kural15 = ctrl.Rule(
+                pil_seviyesi_var['cok_iyi'] & 
+                nem_var['nemli_toprak'] & 
+                basinc_var['normal'] & 
+                ph_var['notr'], 
+                enerji_tuketimi['minimum']
+            )
+            
+            # Kritik durum: Pil düşük ve pH uygun değil
+            kural16 = ctrl.Rule(
+                (pil_seviyesi_var['cok_kotu'] | pil_seviyesi_var['kotu']) & 
+                (ph_var['asidik'] | ph_var['bazik']), 
+                enerji_tuketimi['cok_yuksek']
+            )
+            
+            # Yüksek enerji tüketimi: Nemli ortam ve yüksek basınç
+            kural17 = ctrl.Rule(
+                nem_var['suda'] & basinc_var['yuksek'], 
+                enerji_tuketimi['yuksek']
+            )
+            
+            # Normal durum: Orta seviye pil ve normal koşullar
+            kural18 = ctrl.Rule(
+                pil_seviyesi_var['orta'] & 
+                nem_var['nemli_toprak'] & 
+                basinc_var['normal'] & 
+                ph_var['notr'], 
+                enerji_tuketimi['normal']
+            )
+            
+            # Düşük enerji tüketimi: İyi pil ve optimal koşullar
+            kural19 = ctrl.Rule(
+                (pil_seviyesi_var['iyi'] | pil_seviyesi_var['cok_iyi']) & 
+                nem_var['nemli_toprak'] & 
+                basinc_var['normal'] & 
+                ph_var['notr'], 
+                enerji_tuketimi['dusuk']
+            )
+            
+            # Kontrol sistemini oluştur
+            enerji_tuketimi_ctrl = ctrl.ControlSystem([
+                kural1, kural2, kural3, kural4, kural5,  # Pil seviyesi kuralları
+                kural6, kural7, kural8,                   # Nem kuralları
+                kural9, kural10, kural11,                 # pH kuralları
+                kural12, kural13, kural14,                # Basınç kuralları
+                kural15,                                  # İdeal durum
+                kural16,                                  # Kritik durum
+                kural17,                                  # Yüksek tüketim
+                kural18,                                  # Normal durum
+                kural19                                   # Düşük tüketim
+            ])
+            
+            # Kontrolcü oluştur
+            enerji_tuketimi_sim = ctrl.ControlSystemSimulation(enerji_tuketimi_ctrl)
+            
+            # Giriş değerlerini kontrolcüye aktar
+            enerji_tuketimi_sim.input['pil_seviyesi'] = pil_seviyesi_deger
+            enerji_tuketimi_sim.input['nem'] = nem_deger
+            enerji_tuketimi_sim.input['basinc'] = basinc_deger
+            enerji_tuketimi_sim.input['ph'] = ph_deger
+            
+            # Kontrolcüyü çalıştır
+            enerji_tuketimi_sim.compute()
+            
+            # Sonucu al
+            enerji_tuketimi_sonuc = enerji_tuketimi_sim.output['enerji_tuketimi']
+            return min(100, max(0, enerji_tuketimi_sonuc))  # 0-100 arasında sınırla
             
         except Exception as e:
             print(f"Bulanık mantık hesaplama hatası: {e}")
-            return 50
+            return 50  # Hata durumunda varsayılan değer
     
     def enerji_hesapla(self, hava_durumu_verileri):
         """Sensör düğümlerinin enerji tüketimini hesaplar."""
         for node in self.ag.nodes():
             if self.sensor_durumlari[node]['aktif']:
-                # MATLAB'dan alınan bulanık mantık ile enerji tüketimini hesapla
+                # Bulanık mantık ile enerji tüketimini hesapla
                 enerji_tuketimi = self.bulanik_mantik_kurallari(
-                    hava_durumu_verileri['sicaklik'],
+                    self.sensor_durumlari[node]['enerji_seviyesi'],
                     hava_durumu_verileri['nem'],
-                    hava_durumu_verileri['ruzgar']
+                    hava_durumu_verileri['basinc'],
+                    hava_durumu_verileri['ph']
                 )
                 
                 # Sensörün enerji seviyesini güncelle
                 self.sensor_durumlari[node]['enerji_seviyesi'] -= (enerji_tuketimi / 100)
+                
+                # Enerji seviyesini 0-100 arasında sınırla
+                self.sensor_durumlari[node]['enerji_seviyesi'] = max(0, min(100, self.sensor_durumlari[node]['enerji_seviyesi']))
                 
                 # Enerji seviyesi kritik seviyenin altına düşerse sensörü devre dışı bırak
                 if self.sensor_durumlari[node]['enerji_seviyesi'] < 10:
@@ -870,11 +1204,13 @@ class KAASimulasyon:
         koordinator = max(aktif_sensorler, 
                          key=lambda x: self.sensor_durumlari[x]['enerji_seviyesi'])
         
+        ortalama_enerji = np.mean([self.sensor_durumlari[node]['enerji_seviyesi'] 
+                                 for node in aktif_sensorler]) if aktif_sensorler else 0
+        
         return {
             'koordinator': koordinator,
             'aktif_sensor_sayisi': len(aktif_sensorler),
-            'ortalama_enerji': np.mean([self.sensor_durumlari[node]['enerji_seviyesi'] 
-                                      for node in aktif_sensorler])
+            'ortalama_enerji': ortalama_enerji
         }
 
     def hesapla_sicaklik_uyelik(self, sicaklik):
@@ -907,19 +1243,19 @@ class KAASimulasyon:
             'yuksek': 0.34
         }
     
-    def hesapla_ruzgar_uyelik(self, ruzgar):
-        """Rüzgar hızı için üyelik derecelerini hesaplar"""
+    def hesapla_ph_uyelik(self, ph):
+        """pH için üyelik derecelerini hesaplar"""
         if self.fis_dosyasi is None:
             # Varsayılan değerler
             return {
-                'yavas': 0.33,
-                'orta': 0.33,
-                'hizli': 0.34
+                'asit': 0.33,
+                'notr': 0.33,
+                'bazik': 0.34
             }
         return {
-            'yavas': 0.33,
-            'orta': 0.33,
-            'hizli': 0.34
+            'asit': 0.33,
+            'notr': 0.33,
+            'bazik': 0.34
         }
 
 def main():
